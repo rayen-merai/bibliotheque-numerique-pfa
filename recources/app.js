@@ -5,6 +5,7 @@
 document.addEventListener("DOMContentLoaded", () => {
 
   const BASE = 'php/biblio/';
+  const DOCUMENTS_API = '/api/documents';
 
   // ─── DOM refs ──────────────────────────────────────────────
   const bookGrid       = document.getElementById('book-grid');
@@ -226,13 +227,18 @@ document.addEventListener("DOMContentLoaded", () => {
   async function chargerDocuments() {
     bookGrid.innerHTML = '<div class="loading-state">Chargement des documents...</div>';
     try {
-      const res = await fetch(BASE + 'get_document.php');
+      // Prefer Node API (works when page is served on localhost:3000)
+      let res = await fetch(DOCUMENTS_API);
+      if (!res.ok) {
+        // Fallback to PHP endpoint when Apache/PHP is used directly
+        res = await fetch(BASE + 'get_document.php');
+      }
       tousLesDocuments = await res.json();
       appliquerFiltres();
     } catch (err) {
       bookGrid.innerHTML = `<div class="empty-state" style="color:#ffc;">
         Impossible de se connecter à la base de données.<br>
-        Vérifiez que le serveur PHP est démarré.
+        Vérifiez que le serveur Node (et/ou PHP) est démarré.
       </div>`;
     }
   }

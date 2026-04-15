@@ -81,7 +81,7 @@ async function initDB() {
     await conn.query("CREATE DATABASE IF NOT EXISTS `bibliotheque`");
     await conn.query("USE `bibliotheque`");
 
-    // Users table (role: user | admin)
+    // Users table
     await conn.query(`
       CREATE TABLE IF NOT EXISTS users (
         id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -93,17 +93,23 @@ async function initDB() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
-    // Documents numériques (recources) — create table if needed so sync can run safely
+    // Documents numeriques (compatible with both recources PHP and emprunts routes)
     await conn.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id INT AUTO_INCREMENT PRIMARY KEY,
         titre VARCHAR(255) NOT NULL,
         auteur VARCHAR(255) NOT NULL,
+        annee INT NULL,
         description TEXT DEFAULT '',
         categorie VARCHAR(100) NOT NULL,
         fichier VARCHAR(255) DEFAULT '',
         type_fichier VARCHAR(10) DEFAULT '',
-        date_ajout TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        nb_exemplaires INT DEFAULT 1,
+        nb_empruntes INT DEFAULT 0,
+        actif TINYINT(1) DEFAULT 1,
+        date_ajout TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
@@ -141,16 +147,19 @@ async function initDB() {
     // Emprunts table
     await conn.query(`
       CREATE TABLE IF NOT EXISTS emprunts (
-        id                    INT AUTO_INCREMENT PRIMARY KEY,
-        user_id               INT NOT NULL,
-        livre_id              INT NOT NULL,
-        date_emprunt          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        date_retour_prevue    DATE NOT NULL,
-        date_retour_effective DATETIME,
-        statut                ENUM('en_cours','en_retard','retourne') DEFAULT 'en_cours',
-        prolonge              BOOLEAN DEFAULT FALSE,
-        FOREIGN KEY (user_id)  REFERENCES users(id)  ON DELETE CASCADE,
-        FOREIGN KEY (livre_id) REFERENCES livres(id) ON DELETE CASCADE
+        id                 INT AUTO_INCREMENT PRIMARY KEY,
+        userId             INT NOT NULL,
+        documentId         INT NOT NULL,
+        date_emprunt       DATETIME DEFAULT CURRENT_TIMESTAMP,
+        date_retour_prevue DATETIME NOT NULL,
+        date_retour_reelle DATETIME NULL,
+        statut             ENUM('en_cours','retourne','en_retard','perdu') DEFAULT 'en_cours',
+        renouvelle         TINYINT(1) DEFAULT 0,
+        notes              TEXT NULL,
+        traite_par         INT NULL,
+        createdAt          DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
@@ -381,6 +390,42 @@ app.get('/api/livres', async (req, res) => {
     res.json(livres);
   } catch (err) {
     res.status(500).json({ message: 'Erreur serveur.' });
+  }
+});
+
+// GET /api/documents — documents list for recources frontend
+app.get('/api/documents', async (req, res) => {
+  try {
+    // Unified/current schema
+    const [rows] = await db.query(`
+      SELECT id, titre, auteur, description, categorie, fichier, type_fichier, date_ajout
+      FROM documents
+      ORDER BY date_ajout DESC
+    `);
+    return res.json(rows);
+  } catch (err) {
+    if (err.code !== 'ER_BAD_FIELD_ERROR') {
+      console.error(err);
+      return res.status(500).json({ message: 'Erreur base de données ❌' });
+    }
+  }
+
+  try {
+    // Legacy schema fallback (categorieId/format)
+    const [rows] = await db.query(`
+      SELECT d.id, d.titre, d.auteur, d.description,
+             COALESCE(c.nom, 'Autres') AS categorie,
+             d.fichier,
+             LOWER(COALESCE(d.format, 'pdf')) AS type_fichier,
+             COALESCE(d.createdAt, NOW()) AS date_ajout
+      FROM documents d
+      LEFT JOIN categories c ON d.categorieId = c.id
+      ORDER BY date_ajout DESC
+    `);
+    res.json(rows);
+  } catch (legacyErr) {
+    console.error(legacyErr);
+    res.status(500).json({ message: 'Erreur base de données ❌' });
   }
 });
 
