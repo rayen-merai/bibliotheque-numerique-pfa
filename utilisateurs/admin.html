@@ -12,10 +12,10 @@
 <div class="sidebar">
     <h3>📚 Bibliothèque</h3>
     <ul>
-        <li>Dashboard</li>
-        <li>Utilisateurs</li>
-        <li> <a href="../recources/index.html"> Livres </a> </li>
-        <li>Paramètres</li>
+        <li class="active">Dashboard</li>
+        <li onclick="window.location.href='/emprunts.html'">📋 Emprunts</li>
+        <li><a href="/recources/index.html">📖 Livres</a></li>
+        <li onclick="logout()">🚪 Déconnexion</li>
     </ul>
 </div>
 
@@ -44,7 +44,7 @@
 </div>
 
 <script>
-const API_URL = "http://localhost:3000/api";
+const API_URL = "/api";
 
 
 function logout() {

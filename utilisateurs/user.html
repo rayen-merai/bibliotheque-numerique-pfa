@@ -29,7 +29,7 @@
 </div>
 
 <script>
-const API_URL = "http://localhost:3000/api";
+const API_URL = "/api";
 
 function navigateTo(page) {
     switch(page) {
@@ -41,7 +41,7 @@ function navigateTo(page) {
             break;
         case 'emprunts':
             // Navigate to emprunts page
-            window.location.href = "../emprunts/emprunts.html";
+            window.location.href = "/emprunts.html";
             break;
         case 'profil':
             // Could navigate to profile page
@@ -78,7 +78,9 @@ async function loadBooks() {
         books.forEach(book => {
             const bookDiv = document.createElement("div");
             bookDiv.className = "book";
-            bookDiv.innerHTML = `📖 <strong>${book.title}</strong><br><small>${book.author} (${book.year})</small>`;
+            const author = book.author || "Auteur inconnu";
+            const year = book.year ? ` (${book.year})` : "";
+            bookDiv.innerHTML = `📖 <strong>${book.title}</strong><br><small>${author}${year}</small>`;
             booksList.appendChild(bookDiv);
         });
     } catch (err) {
