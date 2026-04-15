@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Bibliothèque Numérique — Backend Unifié
 
 ## Structure du projet après intégration
@@ -131,3 +132,6 @@ node server.js
 | Bases de données | `test_db` + `bibliotheque` | `bibliotheque` uniquement |
 | JWT | Faux token (`"jwt-token-1"`) | Vrai JWT signé |
 | Rôles | `user/admin` vs `utilisateur/bibliothecaire` | `user/admin` partout |
+=======
+# bibliotheque-numerique-pfa
+>>>>>>> 480e3095d1b72bd7948930e1d9ded691a0040708
