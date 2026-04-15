@@ -17,6 +17,7 @@ let historique = [];
 let retards = [];
 let stats = { en_cours: 0, en_retard: 0, quota_max: 3, total: 0 };
 let currentUser = null;
+let currentRole = localStorage.getItem('role') || 'user';
 
 // Load all data
 async function loadData() {
@@ -25,14 +26,19 @@ async function loadData() {
     const userRes = await fetch(`${API}/user`, { headers: getAuthHeaders() });
     if (userRes.ok) {
       currentUser = await userRes.json();
+      currentRole = currentUser.role || currentRole;
       document.getElementById('user-label').textContent = currentUser.name;
     }
 
-    // Load available books
-    const livresRes = await fetch(`${API}/livres`, { headers: getAuthHeaders() });
-    if (livresRes.ok) {
-      livres = await livresRes.json();
-      populateLivreSelect();
+    applyRoleUI();
+
+    // Only users can create new loans from this interface
+    if (currentRole !== 'admin') {
+      const livresRes = await fetch(`${API}/livres`, { headers: getAuthHeaders() });
+      if (livresRes.ok) {
+        livres = await livresRes.json();
+        populateLivreSelect();
+      }
     }
 
     // Load user stats
@@ -42,33 +48,63 @@ async function loadData() {
       updateStats();
     }
 
-    // Load loan history
-    const histRes = await fetch(`${API}/emprunts/historique`, { headers: getAuthHeaders() });
+    // Load history: personal for users, global for admins
+    const historyEndpoint = currentRole === 'admin' ? `${API}/emprunts` : `${API}/emprunts/historique`;
+    const histRes = await fetch(historyEndpoint, { headers: getAuthHeaders() });
     if (histRes.ok) {
       historique = await histRes.json();
       renderHistorique(historique);
     }
 
     // Load overdue loans (admin only)
-    const role = currentUser ? currentUser.role : localStorage.getItem('role');
-    if (role === 'admin') {
+    if (currentRole === 'admin') {
       const retardsRes = await fetch(`${API}/emprunts/retards`, { headers: getAuthHeaders() });
       if (retardsRes.ok) {
         retards = await retardsRes.json();
         renderRetards(retards);
       }
-    } else {
-      // Hide retards tab for regular users
-      document.querySelector('.tabs').innerHTML = `
-        <button class="tab-btn active" onclick="switchTab('emprunter')">Emprunter</button>
-        <button class="tab-btn" onclick="switchTab('historique')">Mon historique</button>
-      `;
     }
 
   } catch (err) {
     console.error('Erreur chargement données:', err);
     showAlert('alert-emprunt', 'Erreur de connexion au serveur.', 'error');
   }
+}
+
+function applyRoleUI() {
+  const tabsEl = document.querySelector('.tabs');
+  const historiqueTitle = document.getElementById('historique-title');
+  const historiqueHead = document.getElementById('historique-head');
+
+  if (currentRole === 'admin') {
+    tabsEl.innerHTML = `
+      <button class="tab-btn active" data-tab="historique" onclick="switchTab('historique')">Historique</button>
+      <button class="tab-btn" data-tab="retards" onclick="switchTab('retards')">Retards</button>
+    `;
+    document.getElementById('tab-emprunter').classList.remove('active');
+    historiqueTitle.textContent = 'Historique';
+    historiqueHead.innerHTML = `
+      <tr>
+        <th>#</th><th>Utilisateur</th><th>Livre</th><th>Emprunté le</th>
+        <th>Retour prévu</th><th>Statut</th><th>Actions</th>
+      </tr>
+    `;
+    switchTab('historique');
+    return;
+  }
+
+  tabsEl.innerHTML = `
+    <button class="tab-btn active" data-tab="emprunter" onclick="switchTab('emprunter')">Emprunter</button>
+    <button class="tab-btn" data-tab="historique" onclick="switchTab('historique')">Mon historique</button>
+  `;
+  historiqueTitle.textContent = 'Mes emprunts';
+  historiqueHead.innerHTML = `
+    <tr>
+      <th>#</th><th>Livre</th><th>Emprunté le</th>
+      <th>Retour prévu</th><th>Statut</th><th>Actions</th>
+    </tr>
+  `;
+  switchTab('emprunter');
 }
 
 function populateLivreSelect() {
@@ -86,9 +122,12 @@ function updateStats() {
 }
 
 function switchTab(name) {
-  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['emprunter','historique','retards'][i] === name));
+  document.querySelectorAll('.tab-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
   document.querySelectorAll('[id^="tab-"]').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-'+name).classList.add('active');
+  const target = document.getElementById('tab-' + name);
+  if (target) target.classList.add('active');
 }
 
 function statut_chip(s) {
@@ -99,19 +138,36 @@ function statut_chip(s) {
 
 function renderHistorique(data) {
   const tbody = document.getElementById('body-historique');
-  if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Aucun emprunt.</td></tr>'; return; }
-  tbody.innerHTML = data.map(e => `
-    <tr>
-      <td>${e.id}</td>
-      <td><strong>${e.titre}</strong></td>
-      <td>${new Date(e.date_emprunt).toLocaleDateString('fr-FR')}</td>
-      <td>${new Date(e.date_retour_prevue).toLocaleDateString('fr-FR')}</td>
-      <td>${statut_chip(e.statut)}</td>
-      <td>
-        ${e.statut === 'en_cours' ? `<button class="btn btn-success btn-sm" onclick="retourner(${e.id})">Retourner</button>` : ''}
-        ${e.statut === 'en_cours' && !e.prolonge ? `<button class="btn btn-warning btn-sm" style="margin-left:6px" onclick="prolonger(${e.id})">+7 jours</button>` : ''}
-      </td>
-    </tr>`).join('');
+  const isAdmin = currentRole === 'admin';
+
+  if (!data.length) {
+    const colspan = isAdmin ? 7 : 6;
+    tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:var(--muted);padding:24px">Aucun emprunt.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.map(e => {
+    const utilisateurCell = isAdmin
+      ? `<td>${e.utilisateur || '-'}<br><small style="color:var(--muted)">${e.email || ''}</small></td>`
+      : '';
+    const actionsCell = isAdmin
+      ? `<td style="color:var(--muted)">—</td>`
+      : `<td>
+          ${e.statut === 'en_cours' ? `<button class="btn btn-success btn-sm" onclick="retourner(${e.id})">Retourner</button>` : ''}
+          ${e.statut === 'en_cours' && !e.prolonge ? `<button class="btn btn-warning btn-sm" style="margin-left:6px" onclick="prolonger(${e.id})">+7 jours</button>` : ''}
+        </td>`;
+
+    return `
+      <tr>
+        <td>${e.id}</td>
+        ${utilisateurCell}
+        <td><strong>${e.titre}</strong></td>
+        <td>${new Date(e.date_emprunt).toLocaleDateString('fr-FR')}</td>
+        <td>${new Date(e.date_retour_prevue).toLocaleDateString('fr-FR')}</td>
+        <td>${statut_chip(e.statut)}</td>
+        ${actionsCell}
+      </tr>`;
+  }).join('');
 }
 
 function renderRetards(data) {
@@ -228,4 +284,7 @@ loadData();
 // Set return date info
 const d = new Date();
 d.setDate(d.getDate() + 14);
-document.getElementById('date-retour-info').value = d.toLocaleDateString('fr-FR', {day:'2-digit',month:'long',year:'numeric'});
+const dateRetourInfo = document.getElementById('date-retour-info');
+if (dateRetourInfo) {
+  dateRetourInfo.value = d.toLocaleDateString('fr-FR', {day:'2-digit',month:'long',year:'numeric'});
+}

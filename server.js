@@ -29,19 +29,25 @@ app.use(express.urlencoded({ extended: true }));
 //   http://localhost:3000/admin.html  → admin dashboard
 //   http://localhost:3000/user.html   → user dashboard
 //   http://localhost:3000/register.html
-const UTILISATEURS_DIR = path.join(__dirname, '..', 'utilisateurs');
+function resolveProjectPath(dirName) {
+  const inCurrentDir = path.join(__dirname, dirName);
+  if (fs.existsSync(inCurrentDir)) return inCurrentDir;
+  return path.join(__dirname, '..', dirName);
+}
+
+const UTILISATEURS_DIR = resolveProjectPath('utilisateurs');
 if (fs.existsSync(UTILISATEURS_DIR)) {
   app.use(express.static(UTILISATEURS_DIR));
 }
 
 // Serve emprunts page at /emprunts.html
-const EMPRUNTS_HTML = path.join(__dirname, '..', 'emprunts', 'emprunts.html');
+const EMPRUNTS_HTML = path.join(resolveProjectPath('emprunts'), 'emprunts.html');
 if (fs.existsSync(EMPRUNTS_HTML)) {
   app.get('/emprunts.html', (req, res) => res.sendFile(EMPRUNTS_HTML));
 }
 
 // Serve recources folder (for static files; PHP files must be accessed via Apache)
-const RECOURCES_DIR = path.join(__dirname, '..', 'recources');
+const RECOURCES_DIR = resolveProjectPath('recources');
 if (fs.existsSync(RECOURCES_DIR)) {
   app.use('/recources', express.static(RECOURCES_DIR));
 }
