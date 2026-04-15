@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css?v=2">
+    <title>Bibliothèque - Gestion des Ressources</title>
+</head>
+
+<body>
+    <header>
+        <nav class="flex-container">
+            <span class="nav-item"> <a href="../utilisateurs/admin.html"> Accueil </a> </span>
+            <span class="nav-item"> <a href="../emprunts/emprunts.html" > Emprunts </a> </span>
+            <img src="logo (2).png" class="logo" alt="Logo">
+        </nav>
+    </header>
+
+    <main>
+        <div class="navbar-container">
+            <div class="search-wrapper">
+                <input type="text" id="search-input" placeholder="Rechercher par titre, auteur...">
+            </div>
+            <div class="action-group">
+                <select class="filter-select" id="category-filter">
+                    <option value="">Toutes les catégories</option>
+                    <option value="Roman">Roman</option>
+                    <option value="Science">Science</option>
+                    <option value="Histoire">Histoire</option>
+                    <option value="Informatique">Informatique</option>
+                    <option value="Art">Art</option>
+                    <option value="Philosophie">Philosophie</option>
+                    <option value="Fantasie">Fantasie</option>
+                    <option value="Autre">Autre</option>
+                </select>
+                <select class="filter-select" id="sort-select">
+                    <option value="">Trier par...</option>
+                    <option value="titre">Titre</option>
+                    <option value="auteur">Auteur</option>
+                    <option value="date">Date d'ajout</option>
+                </select>
+                <button class="add-book-btn" id="add-book-btn" title="Ajouter un document">+</button>
+            </div>
+        </div>
+
+        <!-- Message de statut global -->
+        <div id="status-msg" class="status-msg" style="display:none;"></div>
+
+        <!-- Grille des documents -->
+        <div class="book-grid" id="book-grid">
+            <div class="loading-state">Chargement des documents...</div>
+        </div>
+    </main>
+
+    <!-- MODAL — AJOUTER UN DOCUMENT -->
+    <div id="add-modal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-btn" data-close="add-modal">&times;</span>
+            <h2>Ajouter un Document</h2>
+            <div id="add-modal-msg" class="modal-msg" style="display:none;"></div>
+            <div class="form-group">
+                <label>Titre *</label>
+                <input type="text" id="add-titre" placeholder="Titre du document" required>
+            </div>
+            <div class="form-group">
+                <label>Auteur *</label>
+                <input type="text" id="add-auteur" placeholder="Nom de l'auteur" required>
+            </div>
+            <div class="form-group">
+                <label>Catégorie *</label>
+                <select id="add-categorie">
+                    <option value="Roman">Roman</option>
+                    <option value="Science">Science</option>
+                    <option value="Histoire">Histoire</option>
+                    <option value="Informatique">Informatique</option>
+                    <option value="Art">Art</option>
+                    <option value="Philosophie">Philosophie</option>
+                    <option value="Fantasie">Fantasie</option>
+                    <option value="Autre">Autre</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="add-description" placeholder="Courte description..." rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Fichier (PDF ou ePub) *</label>
+                <input type="file" id="add-fichier" accept=".pdf,.epub">
+            </div>
+            <button class="square-btn btn-primary" id="btn-add-submit">Enregistrer le document</button>
+        </div>
+    </div>
+
+    <!-- ===== MODIFIER UN DOCUMENT ===== -->
+    <div id="edit-modal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-btn" data-close="edit-modal">&times;</span>
+            <h2>Modifier le Document</h2>
+            <div id="edit-modal-msg" class="modal-msg" style="display:none;"></div>
+            <input type="hidden" id="edit-id">
+            <div class="form-group">
+                <label>Titre *</label>
+                <input type="text" id="edit-titre" placeholder="Titre du document" required>
+            </div>
+            <div class="form-group">
+                <label>Auteur *</label>
+                <input type="text" id="edit-auteur" placeholder="Nom de l'auteur" required>
+            </div>
+            <div class="form-group">
+                <label>Catégorie *</label>
+                <select id="edit-categorie">
+                    <option value="Roman">Roman</option>
+                    <option value="Science">Science</option>
+                    <option value="Histoire">Histoire</option>
+                    <option value="Informatique">Informatique</option>
+                    <option value="Art">Art</option>
+                    <option value="Philosophie">Philosophie</option>
+                    <option value="Fantasie">Fantasie</option>
+                    <option value="Autre">Autre</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="edit-description" placeholder="Courte description..." rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Nouveau fichier</label>
+                <input type="file" id="edit-fichier" accept=".pdf,.epub">
+                <small>Choisissez un fichier pour remplacer l'ancien document (optionnel).</small>
+            </div>
+            <button class="square-btn btn-primary" id="btn-edit-submit">Mettre à jour</button>
+        </div>
+    </div>
+
+    <!-- ===== CONFIRMER LA SUPPRESSION ===== -->
+    <div id="delete-modal" class="modal-overlay">
+        <div class="modal-content modal-small">
+            <span class="close-btn" data-close="delete-modal">&times;</span>
+            <h2>Confirmer la suppression</h2>
+            <p id="delete-confirm-text">Êtes-vous sûr de vouloir supprimer ce document ?</p>
+            <input type="hidden" id="delete-id">
+            <div class="btn-row">
+                <button class="square-btn btn-danger" id="btn-delete-confirm">Supprimer</button>
+                <button class="square-btn" data-close="delete-modal">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== VOIR LA DESCRIPTION ===== -->
+    <div id="description-modal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-btn" data-close="description-modal">&times;</span>
+            <h2 id="desc-modal-title"></h2>
+            <p id="desc-modal-author" style="color: #666; margin-bottom: 12px;"></p>
+            <div id="desc-modal-description" style="margin-top: 20px; line-height: 1.6; color: #333;"></div>
+        </div>
+    </div>
+
+    <script src="app.js?v=2"></script>
+</body>
+
+</html>

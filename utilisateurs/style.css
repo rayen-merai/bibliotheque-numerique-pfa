@@ -1,0 +1,221 @@
+.role-text {
+    margin-top: 10px;
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+.roles {
+    display: flex;
+    justify-content: space-around;
+    margin: 10px 0 15px 0;
+}
+
+.roles label {
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.roles input {
+    margin-right: 5px;
+    transform: scale(1.2);
+}
+body {
+    background: url("ameni.jpg.jpeg") no-repeat;
+    background-size: cover;
+    background-position: center;
+    font-family: 'Segoe UI', sans-serif;
+    margin: 0;
+    height: 100vh;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    animation: moveBg 20s linear infinite;
+}
+
+@keyframes moveBg {
+    0% {
+        background-position: center top;
+    }
+    50% {
+        background-position: center bottom;
+    }
+    100% {
+        background-position: center top;
+    }
+}
+.login-box {
+    background: white;
+    padding: 20px;
+    border-radius: 15px;
+
+    /* ombre propre */
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+
+    color: black;
+}
+.dashboard {
+    display: flex;
+    height: 100vh;
+    margin: 0;
+    font-family: Arial;
+}
+
+/* SIDEBAR */
+.sidebar {
+    width: 220px;
+    background: linear-gradient(#1e3c72, #2a5298);
+    color: white;
+    padding: 20px;
+}
+
+.sidebar ul {
+    list-style: none;
+    padding: 0;
+}
+
+.sidebar li {
+    margin: 15px 0;
+    cursor: pointer;
+}
+
+/* MAIN */
+.main {
+    flex: 1;
+    padding: 20px;
+    background: #f5f5f5;
+}
+
+/* CARDS */
+.cards {
+    display: flex;
+    gap: 15px;
+}
+
+.card {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    flex: 1;
+    box-shadow: 0 5px 10px rgba(0,0,0,0.1);
+}
+
+/* TABLE */
+table {
+    width: 100%;
+    margin-top: 20px;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 10px;
+    border-bottom: 1px solid #ccc;
+}
+
+/* BOOKS */
+.books {
+    display: flex;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.book {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+}
+/* ─── Switch link (login <-> register) ─── */
+.switch-link {
+    margin-top: 15px;
+    font-size: 13px;
+    color: #555;
+    text-align: center;
+}
+
+.switch-link a {
+    color: #1e3c72;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.switch-link a:hover {
+    text-decoration: underline;
+}
+
+/* ─── Container for login/register pages ─── */
+.container {
+    width: 340px;
+    text-align: center;
+}
+
+.container h2 {
+    color: white;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    margin-bottom: 15px;
+    font-size: 20px;
+}
+
+/* ─── Input placeholders ─── */
+.login-box input[type="text"],
+.login-box input[type="email"],
+.login-box input[type="password"] {
+    width: 90%;
+    padding: 10px;
+    margin: 6px 0;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    outline: none;
+    font-size: 14px;
+    background: #f9f9f9;
+    color: #333;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.login-box input:focus {
+    border-color: #1e3c72;
+    background: #fff;
+}
+
+/* ─── Button inside login-box ─── */
+.login-box button {
+    width: 95%;
+    padding: 10px;
+    margin-top: 12px;
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(45deg, #1e3c72, #2a5298);
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+    transition: 0.3s;
+}
+
+.login-box button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+/* ─── Message feedback ─── */
+#message {
+    margin-top: 12px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #c0392b;
+    min-height: 18px;
+}
+
+/* ─── Admin dashboard logout button ─── */
+.logout-btn {
+    float: right;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+}

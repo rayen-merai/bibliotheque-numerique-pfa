@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestion des emprunts</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #534AB7;
+      --primary-light: #EEEDFE;
+      --teal: #0F6E56;
+      --teal-light: #E1F5EE;
+      --amber: #BA7517;
+      --amber-light: #FAEEDA;
+      --danger: #A32D2D;
+      --danger-light: #FCEBEB;
+      --text: #2C2C2A;
+      --muted: #5F5E5A;
+      --border: #D3D1C7;
+      --bg: #F1EFE8;
+      --white: #ffffff;
+      --radius: 10px;
+    }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header { background: var(--white); border-bottom: 1px solid var(--border); padding: 16px 32px;
+             display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; font-weight: 600; color: var(--primary); }
+    .badge { background: var(--primary-light); color: var(--primary); font-size: 12px;
+             padding: 4px 10px; border-radius: 20px; font-weight: 500; }
+
+    main { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
+
+    .tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--white);
+            border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; width: fit-content; }
+    .tab-btn { padding: 8px 20px; border: none; background: none; border-radius: 8px;
+               cursor: pointer; font-size: 14px; color: var(--muted); font-weight: 500; transition: all .15s; }
+    .tab-btn.active { background: var(--primary); color: #fff; }
+
+    .card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; }
+    .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 13px; font-weight: 500; color: var(--muted); }
+    input, select { padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+                    font-size: 14px; color: var(--text); background: var(--white); outline: none; }
+    input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+    .btn { padding: 9px 18px; border: none; border-radius: 8px; cursor: pointer;
+           font-size: 14px; font-weight: 500; transition: opacity .15s; }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-success { background: var(--teal); color: #fff; }
+    .btn-warning { background: var(--amber); color: #fff; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 600;
+         text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+         border-bottom: 2px solid var(--border); }
+    td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg); }
+
+    .chip { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+    .chip-ok      { background: var(--teal-light); color: var(--teal); }
+    .chip-retard  { background: var(--danger-light); color: var(--danger); }
+    .chip-retour  { background: var(--border); color: var(--muted); }
+    .chip-cours   { background: var(--primary-light); color: var(--primary); }
+
+    .alert { padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; display: none; }
+    .alert-success { background: var(--teal-light); color: var(--teal); border: 1px solid #9FE1CB; }
+    .alert-error   { background: var(--danger-light); color: var(--danger); border: 1px solid #F7C1C1; }
+    .alert.show { display: block; }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
+                 padding: 20px; text-align: center; }
+    .stat-num { font-size: 28px; font-weight: 700; color: var(--primary); }
+    .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    #tab-emprunter, #tab-historique, #tab-retards { display: none; }
+    #tab-emprunter.active, #tab-historique.active, #tab-retards.active { display: block; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📚 Bibliothèque — Gestion des emprunts</h1>
+  <span class="badge" id="user-label">Utilisateur connecté</span>
+</header>
+
+<main>
+  <!-- Statistiques -->
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-num" id="s-encours">2</div><div class="stat-label">Emprunts en cours</div></div>
+    <div class="stat-card"><div class="stat-num" id="s-retards">1</div><div class="stat-label">En retard</div></div>
+    <div class="stat-card"><div class="stat-num" id="s-quota">3</div><div class="stat-label">Quota max</div></div>
+    <div class="stat-card"><div class="stat-num" id="s-total">8</div><div class="stat-label">Total emprunts</div></div>
+  </div>
+
+  <!-- Onglets -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('emprunter')">Emprunter</button>
+    <button class="tab-btn" onclick="switchTab('historique')">Mon historique</button>
+    <button class="tab-btn" onclick="switchTab('retards')">Retards</button>
+  </div>
+
+  <!-- Tab Emprunter -->
+  <div id="tab-emprunter" class="active">
+    <div class="card">
+      <h2>Nouvel emprunt</h2>
+      <div id="alert-emprunt" class="alert"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="livre-select">Livre</label>
+          <select id="livre-select">
+            <option value="">— Chargement des livres... —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Date de retour prévue</label>
+          <input type="text" id="date-retour-info" readonly style="background:var(--bg);color:var(--muted);">
+        </div>
+        <button class="btn btn-primary" onclick="emprunterLivre()">Emprunter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab Historique -->
+  <div id="tab-historique">
+    <div class="card">
+      <h2>Mes emprunts</h2>
+      <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
+        <label style="font-size:13px;color:var(--muted)">Filtrer :</label>
+        <select onchange="filtrerHistorique(this.value)" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+          <option value="">Tous</option>
+          <option value="en_cours">En cours</option>
+          <option value="retourne">Retournés</option>
+          <option value="en_retard">En retard</option>
+        </select>
+      </div>
+      <table id="table-historique">
+        <thead>
+          <tr>
+            <th>#</th><th>Livre</th><th>Emprunté le</th>
+            <th>Retour prévu</th><th>Statut</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="body-historique"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab Retards -->
+  <div id="tab-retards">
+    <div class="card">
+      <h2>Emprunts en retard</h2>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Utilisateur</th><th>Livre</th><th>Retour prévu</th><th>Retard (jours)</th><th>Action</th></tr>
+        </thead>
+        <tbody id="body-retards"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script src="app.js"></script>
+
+</body>
+</html>

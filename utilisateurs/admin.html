@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Bibliothèque</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="dashboard">
+
+<div class="sidebar">
+    <h3>📚 Bibliothèque</h3>
+    <ul>
+        <li>Dashboard</li>
+        <li>Utilisateurs</li>
+        <li> <a href="../recources/index.html"> Livres </a> </li>
+        <li>Paramètres</li>
+    </ul>
+</div>
+
+<div class="main">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2>Tableau de Bord Administrateur</h2>
+        <button class="logout-btn" onclick="logout()">🚪 Déconnexion</button>
+    </div>
+
+    <div class="cards">
+        <div class="card">👥 Utilisateurs: <span id="totalUsers">0</span></div>
+        <div class="card">✅ Actifs: <span id="activeUsers">0</span></div>
+        <div class="card">📖 Livres: <span id="totalBooks">0</span></div>
+    </div>
+
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Nom</th>
+            <th>Email</th>
+            <th>Rôle</th>
+            <th>Date d'inscription</th>
+        </tr>
+        <tbody id="usersList"></tbody>
+    </table>
+</div>
+
+<script>
+const API_URL = "http://localhost:3000/api";
+
+
+function logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("userName");
+    window.location.href = "html.html";
+}
+
+// Redirect if not logged in or not admin
+const role = localStorage.getItem("role");
+if (!localStorage.getItem("token") || role !== "admin") {
+    window.location.href = "html.html";
+}
+
+// Fetch and display users from database
+async function loadUserData() {
+    try {
+        const usersRes = await fetch(`${API_URL}/users`);
+        const users = await usersRes.json();
+        
+        const booksRes = await fetch(`${API_URL}/books`);
+        const books = await booksRes.json();
+        
+        // Update stats
+        document.getElementById("totalUsers").innerText = users.length;
+        document.getElementById("activeUsers").innerText = users.length;
+        document.getElementById("totalBooks").innerText = books.length;
+        
+        // Display users in table
+        const usersList = document.getElementById("usersList");
+        usersList.innerHTML = "";
+        
+        users.forEach(user => {
+            const date = new Date(user.created_at).toLocaleDateString("fr-FR");
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>${user.id}</td>
+                <td>${user.name}</td>
+                <td>${user.email}</td>
+                <td>${user.role === 'admin' ? 'Administrateur' : 'Utilisateur'}</td>
+                <td>${date}</td>
+            `;
+            usersList.appendChild(row);
+        });
+    } catch (err) {
+        console.error("Erreur chargement données:", err);
+        alert("Erreur lors du chargement des données");
+    }
+}
+
+loadUserData();
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inscription - Bibliothèque Numérique</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+    <h2>📚 Bibliothèque Numérique</h2>
+
+    <div class="login-box">
+        <h3 style="margin:0 0 15px 0; font-size:16px; color:#333;">Créer un compte</h3>
+
+        <form id="registerForm">
+            <input type="text" id="registerName" placeholder="Nom complet" required>
+            <input type="email" id="registerEmail" placeholder="Email" required>
+            <input type="password" id="registerPassword" placeholder="Mot de passe" required>
+
+            <p class="role-text">S'inscrire comme :</p>
+
+            <div class="roles">
+                <label>
+                    <input type="radio" name="role" value="user" checked>
+                    Utilisateur
+                </label>
+                <label>
+                    <input type="radio" name="role" value="admin">
+                    Administrateur
+                </label>
+            </div>
+
+            <button type="submit">S'inscrire</button>
+        </form>
+
+        <p id="message"></p>
+
+        <p class="switch-link">
+            Déjà un compte ? <a href="html.html">Se connecter</a>
+        </p>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

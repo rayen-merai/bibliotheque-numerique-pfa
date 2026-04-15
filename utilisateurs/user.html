@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Espace Utilisateur - Bibliothèque</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="dashboard">
+
+<div class="sidebar">
+    <h3>📚 Menu</h3>
+    <ul>
+        <li onclick="navigateTo('accueil')">Accueil</li>
+        <li onclick="navigateTo('catalogue')">Catalogue</li>
+        <li onclick="navigateTo('emprunts')">Mes Emprunts</li>
+        <li onclick="navigateTo('profil')">Profil</li>
+    </ul>
+</div>
+
+<div class="main">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 id="welcomeMsg">Bienvenue à la Bibliothèque !</h2>
+        <button class="logout-btn" onclick="logout()">🚪 Déconnexion</button>
+    </div>
+
+    <div class="books" id="booksList"></div>
+</div>
+
+<script>
+const API_URL = "http://localhost:3000/api";
+
+function navigateTo(page) {
+    switch(page) {
+        case 'accueil':
+            // Stay on current page
+            break;
+        case 'catalogue':
+            // Could navigate to catalog page
+            break;
+        case 'emprunts':
+            // Navigate to emprunts page
+            window.location.href = "../emprunts/emprunts.html";
+            break;
+        case 'profil':
+            // Could navigate to profile page
+            break;
+    }
+}
+
+function logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("userName");
+    window.location.href = "html.html";
+}
+
+// Redirect if not logged in
+if (!localStorage.getItem("token")) {
+    window.location.href = "html.html";
+}
+
+// Show username in welcome message
+const name = localStorage.getItem("userName");
+if (name) {
+    document.getElementById("welcomeMsg").innerText = "Bienvenue, " + name + " ! 👋";
+}
+
+// Fetch and display books from database
+async function loadBooks() {
+    try {
+        const res = await fetch(`${API_URL}/books`);
+        const books = await res.json();
+        const booksList = document.getElementById("booksList");
+        booksList.innerHTML = "";
+        
+        books.forEach(book => {
+            const bookDiv = document.createElement("div");
+            bookDiv.className = "book";
+            bookDiv.innerHTML = `📖 <strong>${book.title}</strong><br><small>${book.author} (${book.year})</small>`;
+            booksList.appendChild(bookDiv);
+        });
+    } catch (err) {
+        console.error("Erreur chargement livres:", err);
+        document.getElementById("booksList").innerHTML = "<p>Erreur lors du chargement des livres</p>";
+    }
+}
+
+loadBooks();
+</script>
+</body>
+</html>
