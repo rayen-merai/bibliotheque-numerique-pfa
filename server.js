@@ -13,6 +13,7 @@ const mysql    = require('mysql2/promise');
 const jwt      = require('jsonwebtoken');
 const path     = require('path');
 const fs       = require('fs');
+const multer   = require('multer');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -24,11 +25,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ─── Static files ──────────────────────────────────────────────────────────────
-// Serve utilisateurs/ pages at the root so their relative links work:
-//   http://localhost:3000/html.html   → login
-//   http://localhost:3000/admin.html  → admin dashboard
-//   http://localhost:3000/user.html   → user dashboard
-//   http://localhost:3000/register.html
 function resolveProjectPath(dirName) {
   const inCurrentDir = path.join(__dirname, dirName);
   if (fs.existsSync(inCurrentDir)) return inCurrentDir;
@@ -40,19 +36,16 @@ if (fs.existsSync(UTILISATEURS_DIR)) {
   app.use(express.static(UTILISATEURS_DIR));
 }
 
-// Serve emprunts page at /emprunts.html
 const EMPRUNTS_HTML = path.join(resolveProjectPath('emprunts'), 'emprunts.html');
 if (fs.existsSync(EMPRUNTS_HTML)) {
   app.get('/emprunts.html', (req, res) => res.sendFile(EMPRUNTS_HTML));
 }
 
-// Serve emprunts assets (js, css) at /emprunts/*
 const EMPRUNTS_DIR = resolveProjectPath('emprunts');
 if (fs.existsSync(EMPRUNTS_DIR)) {
   app.use('/emprunts', express.static(EMPRUNTS_DIR));
 }
 
-// Serve recources folder (for static files; PHP files must be accessed via Apache)
 const RECOURCES_DIR = resolveProjectPath('recources');
 if (fs.existsSync(RECOURCES_DIR)) {
   app.use('/recources', express.static(RECOURCES_DIR));
@@ -61,6 +54,36 @@ if (fs.existsSync(RECOURCES_DIR)) {
 // Root route — redirect to login
 app.get('/', (req, res) => {
   res.redirect('/html.html');
+});
+
+// ─── Multer — file uploads for documents ───────────────────────────────────────
+const UPLOADS_DIR = path.join(resolveProjectPath('recources'), 'php', 'biblio', 'uploads');
+
+// Ensure uploads directory exists
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  console.log('📁 Dossier uploads créé:', UPLOADS_DIR);
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename:    (req, file, cb) => {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, Date.now() + '_' + safeName);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase().slice(1);
+    if (ext === 'pdf' || ext === 'epub') {
+      cb(null, true);
+    } else {
+      cb(new Error('Format non autorisé. Seuls PDF et EPUB sont acceptés.'));
+    }
+  }
 });
 
 // ─── Database pool ─────────────────────────────────────────────────────────────
@@ -73,15 +96,13 @@ const db = mysql.createPool({
   connectionLimit: 10,
 });
 
-// ─── DB bootstrap: create tables if they don't exist ──────────────────────────
+// ─── DB bootstrap ──────────────────────────────────────────────────────────────
 async function initDB() {
   const conn = await db.getConnection();
   try {
-    // Create database if not exists
     await conn.query("CREATE DATABASE IF NOT EXISTS `bibliotheque`");
     await conn.query("USE `bibliotheque`");
 
-    // Users table
     await conn.query(`
       CREATE TABLE IF NOT EXISTS users (
         id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -93,7 +114,6 @@ async function initDB() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
-    // Documents numeriques (compatible with both recources PHP and emprunts routes)
     await conn.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -101,50 +121,21 @@ async function initDB() {
         auteur VARCHAR(255) NOT NULL,
         annee INT NULL,
         description TEXT DEFAULT '',
-        categorie VARCHAR(100) NOT NULL,
+        categorie VARCHAR(100) NOT NULL DEFAULT 'Autre',
         fichier VARCHAR(255) DEFAULT '',
         type_fichier VARCHAR(10) DEFAULT '',
-        nb_exemplaires INT DEFAULT 1,
+        nb_exemplaires INT DEFAULT 3,
         nb_empruntes INT DEFAULT 0,
         actif TINYINT(1) DEFAULT 1,
         date_ajout TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_actif (actif),
+        INDEX idx_titre (titre),
+        INDEX idx_categorie (categorie)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
-    // Livres table (shared by emprunts + used for /api/books)
-    await conn.query(`
-      CREATE TABLE IF NOT EXISTS livres (
-        id               INT AUTO_INCREMENT PRIMARY KEY,
-        titre            VARCHAR(255) NOT NULL,
-        auteur           VARCHAR(255) NOT NULL,
-        annee            INT,
-        stock_total      INT DEFAULT 3,
-        stock_disponible INT DEFAULT 3,
-        document_id      INT NULL,
-        created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `);
-    
-    try {
-      await conn.query('ALTER TABLE livres ADD COLUMN document_id INT NULL');
-    } catch (err) {
-      // ignore if column already exists
-    }
-
-    try {
-      await conn.query(`
-        INSERT INTO livres (titre, auteur, annee, stock_total, stock_disponible, document_id)
-        SELECT d.titre, d.auteur, NULL, 1, 1, d.id
-        FROM documents d
-        WHERE d.id NOT IN (SELECT document_id FROM livres WHERE document_id IS NOT NULL)
-      `);
-    } catch (err) {
-      // ignore if documents table is not present yet or if sync fails
-    }
-
-    // Emprunts table
     await conn.query(`
       CREATE TABLE IF NOT EXISTS emprunts (
         id                 INT AUTO_INCREMENT PRIMARY KEY,
@@ -159,11 +150,14 @@ async function initDB() {
         traite_par         INT NULL,
         createdAt          DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (documentId) REFERENCES documents(id) ON DELETE CASCADE,
+        INDEX idx_userId (userId),
+        INDEX idx_documentId (documentId),
+        INDEX idx_statut (statut)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
-    // Seed sample data if empty
     const [[{ cnt: userCount }]] = await conn.query('SELECT COUNT(*) AS cnt FROM users');
     if (userCount === 0) {
       await conn.query(`
@@ -175,21 +169,8 @@ async function initDB() {
       console.log('✅ Utilisateurs initiaux créés');
     }
 
-    const [[{ cnt: livreCount }]] = await conn.query('SELECT COUNT(*) AS cnt FROM livres');
-    if (livreCount === 0) {
-      await conn.query(`
-        INSERT INTO livres (titre, auteur, annee, stock_total, stock_disponible) VALUES
-          ('Le Petit Prince',  'Antoine de Saint-Exupéry', 1943, 3, 3),
-          ('L''Alchimiste',    'Paulo Coelho',              1988, 2, 2),
-          ('1984',             'George Orwell',             1949, 3, 3),
-          ('Dune',             'Frank Herbert',             1965, 2, 2),
-          ('L''Étranger',      'Albert Camus',              1942, 3, 3),
-          ('Le Seigneur des Anneaux', 'J.R.R. Tolkien',    1954, 2, 2)
-      `);
-      console.log('✅ Livres initiaux créés');
-    }
-
     console.log('✅ Base de données prête');
+    console.log('📂 Uploads dossier:', UPLOADS_DIR);
   } catch (err) {
     console.error('❌ Erreur initDB:', err.message);
   } finally {
@@ -222,7 +203,6 @@ function authMiddleware(rolesAutorises = []) {
 //  ROUTES UTILISATEURS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// POST /api/login
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -236,7 +216,6 @@ app.post('/api/login', async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: 'Email ou mot de passe incorrect ❌' });
     }
-    // Normalize DB roles to app roles (etudiant/enseignant → user, bibliothecaire/admin → admin)
     const appRole = ['admin', 'bibliothecaire'].includes(user.role) ? 'admin' : 'user';
     const token = jwt.sign(
       { id: user.id, name: user.name, email: user.email, role: appRole },
@@ -250,16 +229,13 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// GET /api/user — get current user information
 app.get('/api/user', authMiddleware(['user', 'admin']), async (req, res) => {
   try {
     const [[user]] = await db.query(
       'SELECT id, name, email, role FROM users WHERE id = ?',
       [req.user.id]
     );
-    if (!user) {
-      return res.status(404).json({ message: 'Utilisateur introuvable.' });
-    }
+    if (!user) return res.status(404).json({ message: 'Utilisateur introuvable.' });
     const appRole = ['admin', 'bibliothecaire'].includes(user.role) ? 'admin' : 'user';
     res.json({ id: user.id, name: user.name, email: user.email, role: appRole });
   } catch (err) {
@@ -268,19 +244,16 @@ app.get('/api/user', authMiddleware(['user', 'admin']), async (req, res) => {
   }
 });
 
-// POST /api/register
 app.post('/api/register', async (req, res) => {
   const { name, email, password, role } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'Tous les champs sont obligatoires ❌' });
   }
-
   const requestedAdmin = role === 'admin';
   const modernRole = requestedAdmin ? 'admin' : 'etudiant';
-  const legacyRole = requestedAdmin ? 'admin' : 'user';
+  const legacyRole  = requestedAdmin ? 'admin' : 'user';
 
   try {
-    // Newer schema (users has nom/prenom and role enum includes etudiant)
     await db.query(
       'INSERT INTO users (name, nom, prenom, email, password, role) VALUES (?, ?, ?, ?, ?, ?)',
       [name, name, '', email, password, modernRole]
@@ -288,34 +261,26 @@ app.post('/api/register', async (req, res) => {
     return res.json({ message: 'Inscription réussie ✅' });
   } catch (err) {
     if (err.code !== 'ER_BAD_FIELD_ERROR' && err.code !== 'WARN_DATA_TRUNCATED') {
-      if (err.code === 'ER_DUP_ENTRY') {
-        return res.status(409).json({ message: 'Cet email est déjà utilisé ❌' });
-      }
+      if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Cet email est déjà utilisé ❌' });
       console.error(err);
       return res.status(500).json({ message: 'Erreur base de données ❌' });
     }
   }
-
   try {
-    // Legacy schema (users without nom/prenom and role enum user/admin)
     await db.query(
       'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
       [name, email, password, legacyRole]
     );
     res.json({ message: 'Inscription réussie ✅' });
   } catch (err) {
-    if (err.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ message: 'Cet email est déjà utilisé ❌' });
-    }
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Cet email est déjà utilisé ❌' });
     console.error(err);
     res.status(500).json({ message: 'Erreur base de données ❌' });
   }
 });
 
-// GET /api/users  (admin only)
 app.get('/api/users', async (req, res) => {
   try {
-    // Newer schema
     const [rows] = await db.query(
       'SELECT id, name, email, role, createdAt AS created_at FROM users ORDER BY createdAt DESC'
     );
@@ -326,9 +291,7 @@ app.get('/api/users', async (req, res) => {
       return res.status(500).json({ message: 'Erreur base de données ❌' });
     }
   }
-
   try {
-    // Legacy schema
     const [rows] = await db.query(
       'SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC'
     );
@@ -340,14 +303,17 @@ app.get('/api/users', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ROUTES LIVRES  (utilisé par admin.html + user.html + emprunts)
+//  ROUTES LIVRES
 // ─────────────────────────────────────────────────────────────────────────────
 
-// GET /api/books  — format attendu par utilisateurs frontend { id, title, author, year }
 app.get('/api/books', async (req, res) => {
   try {
-    const [rows] = await db.query(
-      'SELECT id, titre AS title, auteur AS author, annee AS year, stock_disponible FROM livres ORDER BY titre'
+    const [rows] = await db.query(`
+      SELECT d.id, d.titre AS title, d.auteur AS author, d.annee AS year,
+             (d.nb_exemplaires - d.nb_empruntes) AS stock_disponible
+      FROM documents d
+      WHERE d.actif = 1
+      ORDER BY d.titre`
     );
     res.json(rows);
   } catch (err) {
@@ -355,48 +321,30 @@ app.get('/api/books', async (req, res) => {
   }
 });
 
-async function syncDocumentsToLivres() {
-  try {
-    await db.query(`
-      INSERT INTO livres (titre, auteur, annee, stock_total, stock_disponible, document_id)
-      SELECT d.titre, d.auteur, NULL, 1, 1, d.id
-      FROM documents d
-      WHERE d.id NOT IN (SELECT document_id FROM livres WHERE document_id IS NOT NULL)
-    `);
-  } catch (err) {
-    console.error('Sync documents->livres failed:', err.message);
-  }
-}
-
-// GET /api/livres  — format natif pour emprunts { id, titre, auteur, stock_disponible }
 app.get('/api/livres', async (req, res) => {
   try {
-    // Use documents table (real borrowable catalog) with availability check
     const [rows] = await db.query(`
       SELECT id, titre, auteur, annee,
-             (nb_exemplaires - nb_empruntes) AS stock_disponible
+             (nb_exemplaires - nb_empruntes) AS stock_disponible,
+             nb_exemplaires, nb_empruntes
       FROM documents
-      WHERE actif = 1 AND nb_exemplaires > nb_empruntes
+      WHERE actif = 1
       ORDER BY titre
     `);
-    if (rows.length > 0) {
-      return res.json(rows);
-    }
-    // Fallback to livres table if documents is empty
-    await syncDocumentsToLivres();
-    const [livres] = await db.query(
-      'SELECT id, titre, auteur, annee, stock_disponible FROM livres ORDER BY titre'
-    );
-    res.json(livres);
+    res.json(rows);
   } catch (err) {
+    console.error('Error in /api/livres:', err);
     res.status(500).json({ message: 'Erreur serveur.' });
   }
 });
 
-// GET /api/documents — documents list for recources frontend
+// ─────────────────────────────────────────────────────────────────────────────
+//  ROUTES DOCUMENTS (recources — CRUD complet avec upload)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/documents — liste tous les documents
 app.get('/api/documents', async (req, res) => {
   try {
-    // Unified/current schema
     const [rows] = await db.query(`
       SELECT id, titre, auteur, description, categorie, fichier, type_fichier, date_ajout
       FROM documents
@@ -409,9 +357,8 @@ app.get('/api/documents', async (req, res) => {
       return res.status(500).json({ message: 'Erreur base de données ❌' });
     }
   }
-
+  // Legacy schema fallback
   try {
-    // Legacy schema fallback (categorieId/format)
     const [rows] = await db.query(`
       SELECT d.id, d.titre, d.auteur, d.description,
              COALESCE(c.nom, 'Autres') AS categorie,
@@ -429,6 +376,141 @@ app.get('/api/documents', async (req, res) => {
   }
 });
 
+// POST /api/documents — ajouter un document avec fichier
+app.post('/api/documents', upload.single('fichier'), async (req, res) => {
+  const { titre, auteur, description, categorie } = req.body;
+
+  if (!titre || !auteur || !categorie) {
+    // Clean up uploaded file if validation fails
+    if (req.file) fs.unlink(req.file.path, () => {});
+    return res.status(400).json({
+      success: false,
+      message: 'Champs obligatoires manquants: titre, auteur, categorie'
+    });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: 'Aucun fichier reçu. Veuillez sélectionner un fichier PDF ou EPUB.'
+    });
+  }
+
+  const filename    = req.file.filename;
+  const extension   = path.extname(req.file.originalname).toLowerCase().slice(1);
+  const nb_exemplaires = 3;
+  const nb_empruntes   = 0;
+
+  try {
+    const [result] = await db.query(
+      `INSERT INTO documents (titre, auteur, description, categorie, fichier, type_fichier, nb_exemplaires, nb_empruntes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [titre, auteur, description || '', categorie, filename, extension, nb_exemplaires, nb_empruntes]
+    );
+
+    console.log(`✅ Document ajouté: "${titre}" → ${filename}`);
+    return res.status(201).json({
+      success: true,
+      id: result.insertId,
+      message: 'Document ajouté avec succès',
+      fichier: filename,
+      type_fichier: extension
+    });
+  } catch (err) {
+    // Remove uploaded file if DB insert fails
+    fs.unlink(req.file.path, () => {});
+    console.error('Erreur insertion document:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur insertion base de données: ' + err.message
+    });
+  }
+});
+
+// POST /api/documents/:id — modifier un document (optionnellement avec nouveau fichier)
+app.post('/api/documents/:id', upload.single('fichier'), async (req, res) => {
+  const { id }                              = req.params;
+  const { titre, auteur, description, categorie } = req.body;
+
+  if (!titre || !auteur || !categorie) {
+    if (req.file) fs.unlink(req.file.path, () => {});
+    return res.status(400).json({
+      success: false,
+      message: 'Champs obligatoires manquants: titre, auteur, categorie'
+    });
+  }
+
+  try {
+    // Fetch current document to know the old filename
+    const [[existing]] = await db.query('SELECT fichier FROM documents WHERE id = ?', [id]);
+    if (!existing) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      return res.status(404).json({ success: false, message: 'Document introuvable.' });
+    }
+
+    if (req.file) {
+      // New file uploaded — update fichier & type_fichier, delete old file
+      const newFilename  = req.file.filename;
+      const newExtension = path.extname(req.file.originalname).toLowerCase().slice(1);
+
+      await db.query(
+        `UPDATE documents SET titre=?, auteur=?, description=?, categorie=?, fichier=?, type_fichier=? WHERE id=?`,
+        [titre, auteur, description || '', categorie, newFilename, newExtension, id]
+      );
+
+      // Delete old file (non-blocking)
+      if (existing.fichier) {
+        const oldPath = path.join(UPLOADS_DIR, existing.fichier);
+        fs.unlink(oldPath, (err) => {
+          if (err && err.code !== 'ENOENT') console.warn('⚠ Impossible de supprimer l\'ancien fichier:', oldPath);
+        });
+      }
+
+      console.log(`✅ Document #${id} mis à jour avec nouveau fichier: ${newFilename}`);
+    } else {
+      // No new file — only update metadata
+      await db.query(
+        `UPDATE documents SET titre=?, auteur=?, description=?, categorie=? WHERE id=?`,
+        [titre, auteur, description || '', categorie, id]
+      );
+      console.log(`✅ Document #${id} mis à jour (métadonnées uniquement)`);
+    }
+
+    return res.json({ success: true, message: 'Document mis à jour avec succès' });
+  } catch (err) {
+    if (req.file) fs.unlink(req.file.path, () => {});
+    console.error('Erreur modification document:', err);
+    return res.status(500).json({ success: false, message: 'Erreur base de données: ' + err.message });
+  }
+});
+
+// DELETE /api/documents/:id — supprimer un document
+app.delete('/api/documents/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [[existing]] = await db.query('SELECT fichier FROM documents WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Document introuvable.' });
+    }
+
+    await db.query('DELETE FROM documents WHERE id = ?', [id]);
+
+    // Delete physical file (non-blocking)
+    if (existing.fichier) {
+      const filePath = path.join(UPLOADS_DIR, existing.fichier);
+      fs.unlink(filePath, (err) => {
+        if (err && err.code !== 'ENOENT') console.warn('⚠ Impossible de supprimer le fichier:', filePath);
+      });
+    }
+
+    console.log(`✅ Document #${id} supprimé`);
+    return res.json({ success: true, message: 'Document supprimé avec succès' });
+  } catch (err) {
+    console.error('Erreur suppression document:', err);
+    return res.status(500).json({ success: false, message: 'Erreur base de données: ' + err.message });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  ROUTES EMPRUNTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -436,15 +518,14 @@ app.get('/api/documents', async (req, res) => {
 const DUREE_EMPRUNT_JOURS = 14;
 const QUOTA_MAX = 3;
 
-// GET /api/emprunts/historique  — historique de l'utilisateur connecté
 app.get('/api/emprunts/historique', authMiddleware(['user', 'admin']), async (req, res) => {
   const { statut, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
   try {
     let query = `
       SELECT e.id,
-             COALESCE(d.titre, l.titre) AS titre,
-             COALESCE(d.auteur, l.auteur) AS auteur,
+             d.titre,
+             d.auteur,
              e.date_emprunt,
              e.date_retour_prevue,
              e.date_retour_reelle AS date_retour_effective,
@@ -452,7 +533,6 @@ app.get('/api/emprunts/historique', authMiddleware(['user', 'admin']), async (re
              e.renouvelle AS prolonge
       FROM emprunts e
       LEFT JOIN documents d ON e.documentId = d.id
-      LEFT JOIN livres   l ON e.documentId = l.id
       WHERE e.userId = ?`;
     const params = [req.user.id];
     if (statut) { query += ' AND e.statut = ?'; params.push(statut); }
@@ -466,10 +546,8 @@ app.get('/api/emprunts/historique', authMiddleware(['user', 'admin']), async (re
   }
 });
 
-// GET /api/emprunts/retards  — emprunts en retard (admin)
 app.get('/api/emprunts/retards', authMiddleware(['admin']), async (req, res) => {
   try {
-    // Mark overdue first
     await db.query(
       `UPDATE emprunts SET statut = 'en_retard'
        WHERE statut = 'en_cours' AND date_retour_prevue < NOW()`
@@ -477,13 +555,12 @@ app.get('/api/emprunts/retards', authMiddleware(['admin']), async (req, res) => 
     const [rows] = await db.query(`
       SELECT e.id,
              u.name AS utilisateur, u.email,
-             COALESCE(d.titre, l.titre) AS titre,
+             d.titre,
              e.date_retour_prevue,
              DATEDIFF(NOW(), e.date_retour_prevue) AS jours_retard
       FROM emprunts e
       JOIN users    u ON e.userId     = u.id
       LEFT JOIN documents d ON e.documentId = d.id
-      LEFT JOIN livres    l ON e.documentId = l.id
       WHERE e.statut = 'en_retard'
       ORDER BY jours_retard DESC
     `);
@@ -494,13 +571,12 @@ app.get('/api/emprunts/retards', authMiddleware(['admin']), async (req, res) => 
   }
 });
 
-// GET /api/emprunts  — tous les emprunts (admin)
 app.get('/api/emprunts', authMiddleware(['admin']), async (req, res) => {
   try {
     const [rows] = await db.query(`
       SELECT e.id,
              u.name AS utilisateur, u.email,
-             COALESCE(d.titre, l.titre) AS titre,
+             d.titre,
              e.date_emprunt, e.date_retour_prevue,
              e.date_retour_reelle AS date_retour_effective,
              e.statut,
@@ -508,7 +584,6 @@ app.get('/api/emprunts', authMiddleware(['admin']), async (req, res) => {
       FROM emprunts e
       JOIN users    u ON e.userId     = u.id
       LEFT JOIN documents d ON e.documentId = d.id
-      LEFT JOIN livres    l ON e.documentId = l.id
       ORDER BY e.date_emprunt DESC
       LIMIT 200
     `);
@@ -518,26 +593,36 @@ app.get('/api/emprunts', authMiddleware(['admin']), async (req, res) => {
   }
 });
 
-// GET /api/emprunts/stats  — statistiques pour le dashboard emprunts
 app.get('/api/emprunts/stats', authMiddleware(['user', 'admin']), async (req, res) => {
   try {
     const userId = req.user.id;
-    const [[{ en_cours }]] = await db.query(
-      `SELECT COUNT(*) AS en_cours FROM emprunts WHERE userId = ? AND statut = 'en_cours'`, [userId]
-    );
-    const [[{ en_retard }]] = await db.query(
-      `SELECT COUNT(*) AS en_retard FROM emprunts WHERE userId = ? AND statut = 'en_retard'`, [userId]
-    );
-    const [[{ total }]] = await db.query(
-      `SELECT COUNT(*) AS total FROM emprunts WHERE userId = ?`, [userId]
-    );
+    const isAdmin = req.user.role === 'admin';
+
+    // Si admin, afficher les stats globales; sinon, stats de l'utilisateur
+    let en_cours, en_retard, total;
+
+    if (isAdmin) {
+      const [[row1]] = await db.query(`SELECT COUNT(*) AS en_cours FROM emprunts WHERE statut = 'en_cours'`);
+      const [[row2]] = await db.query(`SELECT COUNT(*) AS en_retard FROM emprunts WHERE statut = 'en_retard'`);
+      const [[row3]] = await db.query(`SELECT COUNT(*) AS total FROM emprunts`);
+      en_cours = row1.en_cours;
+      en_retard = row2.en_retard;
+      total = row3.total;
+    } else {
+      const [[row1]] = await db.query(`SELECT COUNT(*) AS en_cours FROM emprunts WHERE userId = ? AND statut = 'en_cours'`, [userId]);
+      const [[row2]] = await db.query(`SELECT COUNT(*) AS en_retard FROM emprunts WHERE userId = ? AND statut = 'en_retard'`, [userId]);
+      const [[row3]] = await db.query(`SELECT COUNT(*) AS total FROM emprunts WHERE userId = ?`, [userId]);
+      en_cours = row1.en_cours;
+      en_retard = row2.en_retard;
+      total = row3.total;
+    }
+
     res.json({ en_cours, en_retard, quota_max: QUOTA_MAX, total });
   } catch (err) {
     res.status(500).json({ message: 'Erreur serveur.' });
   }
 });
 
-// POST /api/emprunts  — créer un emprunt
 app.post('/api/emprunts', authMiddleware(['user', 'admin']), async (req, res) => {
   const conn = await db.getConnection();
   try {
@@ -550,7 +635,6 @@ app.post('/api/emprunts', authMiddleware(['user', 'admin']), async (req, res) =>
       return res.status(400).json({ message: 'livre_id requis.' });
     }
 
-    // Check quota
     const [[{ total }]] = await conn.query(
       `SELECT COUNT(*) AS total FROM emprunts WHERE userId = ? AND statut IN ('en_cours','en_retard')`,
       [user_id]
@@ -560,68 +644,56 @@ app.post('/api/emprunts', authMiddleware(['user', 'admin']), async (req, res) =>
       return res.status(409).json({ message: `Quota atteint (max ${QUOTA_MAX} emprunts simultanés).` });
     }
 
-    // Check book availability — try documents first, then livres
-    let livre = null;
-    let useDocuments = false;
     const [[docRow]] = await conn.query(
       'SELECT id, titre, nb_exemplaires, nb_empruntes FROM documents WHERE id = ? FOR UPDATE', [livre_id]
     );
-    if (docRow && (docRow.nb_exemplaires - docRow.nb_empruntes) > 0) {
-      livre = { id: docRow.id, titre: docRow.titre, stock_disponible: docRow.nb_exemplaires - docRow.nb_empruntes };
-      useDocuments = true;
-    } else {
-      const [[livreRow]] = await conn.query(
-        'SELECT id, titre, stock_disponible FROM livres WHERE id = ? FOR UPDATE', [livre_id]
-      );
-      if (livreRow && livreRow.stock_disponible > 0) livre = livreRow;
+    if (!docRow) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Livre introuvable.' });
     }
 
-    if (!livre) {
+    const availableStock = docRow.nb_exemplaires - docRow.nb_empruntes;
+    if (availableStock <= 0) {
       await conn.rollback();
-      return res.status(404).json({ message: 'Livre introuvable ou indisponible.' });
+      return res.status(409).json({ message: 'Ce livre n\'est pas disponible pour le moment.' });
     }
 
     const dateRetour = new Date();
     dateRetour.setDate(dateRetour.getDate() + DUREE_EMPRUNT_JOURS);
     const now = new Date();
+    const isoNow = now.toISOString().slice(0, 19).replace('T', ' ');
+    const dateRetourISO = dateRetour.toISOString().slice(0, 10);
 
     const [result] = await conn.query(
       'INSERT INTO emprunts (userId, documentId, date_emprunt, date_retour_prevue, statut, createdAt, updatedAt) VALUES (?, ?, ?, ?, \'en_cours\', ?, ?)',
-      [user_id, livre_id, now, dateRetour.toISOString().split('T')[0], now, now]
+      [user_id, livre_id, isoNow, dateRetourISO, isoNow, isoNow]
     );
-    if (useDocuments) {
-      await conn.query(
-        'UPDATE documents SET nb_empruntes = nb_empruntes + 1 WHERE id = ?', [livre_id]
-      );
-    } else {
-      await conn.query(
-        'UPDATE livres SET stock_disponible = stock_disponible - 1 WHERE id = ?', [livre_id]
-      );
-    }
+
+    await conn.query(
+      'UPDATE documents SET nb_empruntes = nb_empruntes + 1 WHERE id = ?',
+      [livre_id]
+    );
 
     await conn.commit();
     res.status(201).json({
       message: 'Emprunt créé avec succès.',
-      emprunt: { id: result.insertId, livre: livre.titre, date_retour_prevue: dateRetour }
+      emprunt: { id: result.insertId, livre: docRow.titre, date_retour_prevue: dateRetourISO }
     });
   } catch (err) {
     await conn.rollback();
-    console.error(err);
+    console.error('Error creating emprunt:', err);
     res.status(500).json({ message: 'Erreur serveur.' });
   } finally {
     conn.release();
   }
 });
 
-// PUT /api/emprunts/:id/retour  — retourner un livre
 app.put('/api/emprunts/:id/retour', authMiddleware(['user', 'admin']), async (req, res) => {
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
     const { id } = req.params;
-    const [[emprunt]] = await conn.query(
-      'SELECT * FROM emprunts WHERE id = ? FOR UPDATE', [id]
-    );
+    const [[emprunt]] = await conn.query('SELECT * FROM emprunts WHERE id = ? FOR UPDATE', [id]);
     if (!emprunt) {
       await conn.rollback();
       return res.status(404).json({ message: 'Emprunt introuvable.' });
@@ -630,36 +702,31 @@ app.put('/api/emprunts/:id/retour', authMiddleware(['user', 'admin']), async (re
       await conn.rollback();
       return res.status(409).json({ message: 'Ce livre a déjà été retourné.' });
     }
-    // Users can only return their own books
     if (req.user.role === 'user' && emprunt.userId !== req.user.id) {
       await conn.rollback();
       return res.status(403).json({ message: 'Accès interdit.' });
     }
-
     const now = new Date();
+    const isoNow = now.toISOString().slice(0, 19).replace('T', ' ');
     await conn.query(
-      `UPDATE emprunts SET statut = 'retourne', date_retour_reelle = ?, updatedAt = ? WHERE id = ?`, [now, now, id]
-    );
-    // Restore stock in documents or livres
-    await conn.query(
-      'UPDATE documents SET nb_empruntes = GREATEST(nb_empruntes - 1, 0) WHERE id = ?', [emprunt.documentId]
+      `UPDATE emprunts SET statut = 'retourne', date_retour_reelle = ?, updatedAt = ? WHERE id = ?`,
+      [isoNow, isoNow, id]
     );
     await conn.query(
-      'UPDATE livres SET stock_disponible = LEAST(stock_disponible + 1, stock_total) WHERE id = ?', [emprunt.documentId]
+      'UPDATE documents SET nb_empruntes = GREATEST(nb_empruntes - 1, 0) WHERE id = ?',
+      [emprunt.documentId]
     );
-
     await conn.commit();
     res.json({ message: 'Retour enregistré avec succès.' });
   } catch (err) {
     await conn.rollback();
-    console.error(err);
+    console.error('Error in return:', err);
     res.status(500).json({ message: 'Erreur serveur.' });
   } finally {
     conn.release();
   }
 });
 
-// PUT /api/emprunts/:id/prolonger  — prolonger de 7 jours (une seule fois)
 app.put('/api/emprunts/:id/prolonger', authMiddleware(['user', 'admin']), async (req, res) => {
   try {
     const { id } = req.params;
@@ -673,7 +740,6 @@ app.put('/api/emprunts/:id/prolonger', authMiddleware(['user', 'admin']), async 
     const newDate = new Date(emprunt.date_retour_prevue);
     newDate.setDate(newDate.getDate() + 7);
     const now = new Date();
-
     await db.query(
       'UPDATE emprunts SET date_retour_prevue = ?, renouvelle = 1, updatedAt = ? WHERE id = ?',
       [newDate.toISOString().split('T')[0], now, id]
@@ -688,17 +754,26 @@ app.put('/api/emprunts/:id/prolonger', authMiddleware(['user', 'admin']), async 
 // ─── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
-// ─── 404 fallback for API routes ───────────────────────────────────────────────
-app.use('/api', (req, res) => res.status(404).json({ message: 'Route introuvable.' }));
-
-// ─── Global error handler ──────────────────────────────────────────────────────
+// ─── Multer error handler ──────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ success: false, message: 'Le fichier est trop volumineux (max 50MB).' });
+    }
+    return res.status(400).json({ success: false, message: 'Erreur upload: ' + err.message });
+  }
+  if (err && err.message && err.message.includes('Format non autorisé')) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     return res.status(400).json({ message: 'JSON invalide dans la requête.' });
   }
   console.error(err.stack);
   res.status(500).json({ message: 'Erreur interne du serveur.' });
 });
+
+// ─── 404 fallback for API routes ───────────────────────────────────────────────
+app.use('/api', (req, res) => res.status(404).json({ message: 'Route introuvable.' }));
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
 initDB().then(() => {
@@ -707,6 +782,6 @@ initDB().then(() => {
     console.log(`   Pages utilisateurs : http://localhost:${PORT}/html.html`);
     console.log(`   Inscription        : http://localhost:${PORT}/register.html`);
     console.log(`   Gestion emprunts   : http://localhost:${PORT}/emprunts.html`);
-    console.log(`   Ressources (PHP)   : http://localhost/recources/index.html\n`);
+    console.log(`   Ressources         : http://localhost:${PORT}/recources/index.html\n`);
   });
 });

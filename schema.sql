@@ -1,6 +1,7 @@
 -- ============================================================
---  Bibliotheque Numerique - Schema Unifie et Portable
---  Aligne avec server.js (users/livres/documents/emprunts)
+--  Bibliotheque Numerique - Schema Unifie
+--  SINGLE DATABASE: documents is the only borrowable catalog
+--  No livres sync table - documents is source of truth
 -- ============================================================
 
 CREATE DATABASE IF NOT EXISTS `bibliotheque`
@@ -26,37 +27,29 @@ CREATE TABLE `users` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Documents (for recources PHP + emprunts logic)
+-- Documents (PRIMARY - ONLY - borrowable catalog)
+-- Used by both resources (PHP upload) and emprunts (borrowing system)
 CREATE TABLE `documents` (
   `id`            INT AUTO_INCREMENT PRIMARY KEY,
   `titre`         VARCHAR(255) NOT NULL,
   `auteur`        VARCHAR(255) NOT NULL,
   `annee`         INT NULL,
   `description`   TEXT DEFAULT '',
-  `categorie`     VARCHAR(100) NOT NULL,
+  `categorie`     VARCHAR(100) NOT NULL DEFAULT 'Autre',
   `fichier`       VARCHAR(255) DEFAULT '',
   `type_fichier`  VARCHAR(10) DEFAULT '',
-  `nb_exemplaires` INT DEFAULT 1,
+  `nb_exemplaires` INT DEFAULT 3,
   `nb_empruntes`  INT DEFAULT 0,
   `actif`         TINYINT(1) DEFAULT 1,
   `date_ajout`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `createdAt`     DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `updatedAt`     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  `updatedAt`     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_actif (actif),
+  INDEX idx_titre (titre),
+  INDEX idx_categorie (categorie)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Livres (catalog used by /api/books and fallback for emprunts)
-CREATE TABLE `livres` (
-  `id`               INT AUTO_INCREMENT PRIMARY KEY,
-  `titre`            VARCHAR(255) NOT NULL,
-  `auteur`           VARCHAR(255) NOT NULL,
-  `annee`            INT,
-  `stock_total`      INT DEFAULT 3,
-  `stock_disponible` INT DEFAULT 3,
-  `document_id`      INT NULL,
-  `created_at`       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Emprunts (aligned with routes using userId/documentId/renouvelle)
+-- Emprunts (loans) - linked to documents
 CREATE TABLE `emprunts` (
   `id`                 INT AUTO_INCREMENT PRIMARY KEY,
   `userId`             INT NOT NULL,
@@ -70,7 +63,11 @@ CREATE TABLE `emprunts` (
   `traite_par`         INT NULL,
   `createdAt`          DATETIME DEFAULT CURRENT_TIMESTAMP,
   `updatedAt`          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE
+  FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`documentId`) REFERENCES `documents`(`id`) ON DELETE CASCADE,
+  INDEX idx_userId (userId),
+  INDEX idx_documentId (documentId),
+  INDEX idx_statut (statut)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Seed users
@@ -78,12 +75,3 @@ INSERT INTO `users` (`name`, `email`, `password`, `role`) VALUES
   ('Admin Bibliotheque', 'admin@biblio.fr', 'admin123', 'admin'),
   ('Alice Dupont',       'alice@biblio.fr', 'alice123', 'user'),
   ('Bob Martin',         'bob@biblio.fr',   'bob123',   'user');
-
--- Seed books
-INSERT INTO `livres` (`titre`, `auteur`, `annee`, `stock_total`, `stock_disponible`) VALUES
-  ('Le Petit Prince',         'Antoine de Saint-Exupery', 1943, 3, 3),
-  ('L''Alchimiste',           'Paulo Coelho',             1988, 2, 2),
-  ('1984',                    'George Orwell',            1949, 3, 3),
-  ('Dune',                    'Frank Herbert',            1965, 2, 2),
-  ('L''Etranger',             'Albert Camus',             1942, 3, 3),
-  ('Le Seigneur des Anneaux', 'J.R.R. Tolkien',           1954, 2, 2);

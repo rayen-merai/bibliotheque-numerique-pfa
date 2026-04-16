@@ -279,16 +279,25 @@ document.addEventListener("DOMContentLoaded", () => {
     btnAddSubmit.disabled    = true;
     btnAddSubmit.textContent = 'Enregistrement...';
     try {
-      const res  = await fetch(BASE + 'add_document.php', { method: 'POST', body: formData });
-      const text = await res.text();
-      if (text.includes('succès') || res.ok) {
-        afficherMsgModal(addModalMsg, 'Document ajouté avec succès !', 'success');
+      const res  = await fetch(DOCUMENTS_API, { method: 'POST', body: formData });
+      let data;
+      
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        // If not JSON, treat as error
+        data = { success: false, message: 'Erreur: réponse invalide du serveur' };
+      }
+      
+      if (data.success || (res.ok && res.status === 201)) {
+        afficherMsgModal(addModalMsg, data.message || 'Document ajouté avec succès !', 'success');
         setTimeout(() => { fermerModal('add-modal'); chargerDocuments(); }, 1000);
       } else {
-        afficherMsgModal(addModalMsg, text || "Erreur lors de l'ajout.");
+        afficherMsgModal(addModalMsg, data.message || "Erreur lors de l'ajout.");
       }
     } catch (err) {
-      afficherMsgModal(addModalMsg, 'Erreur réseau. Vérifiez la connexion au serveur.');
+      console.error('Error adding document:', err);
+      afficherMsgModal(addModalMsg, 'Erreur réseau: ' + err.message);
     } finally {
       btnAddSubmit.disabled    = false;
       btnAddSubmit.textContent = 'Enregistrer le document';
@@ -338,16 +347,25 @@ document.addEventListener("DOMContentLoaded", () => {
     btnEditSubmit.disabled    = true;
     btnEditSubmit.textContent = 'Mise à jour...';
     try {
-      const res  = await fetch(BASE + 'edit_document.php', { method: 'POST', body: formData });
-      const text = await res.text();
-      if (text.includes('succès') || res.ok) {
-        afficherMsgModal(editModalMsg, 'Document mis à jour !', 'success');
+      const id_val = document.getElementById('edit-id').value;
+      const res  = await fetch(`${DOCUMENTS_API}/${encodeURIComponent(id_val)}`, { method: 'POST', body: formData });
+      let data;
+      
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        data = { success: false, message: 'Erreur: réponse invalide du serveur' };
+      }
+      
+      if (data.success || (res.ok && res.status === 200)) {
+        afficherMsgModal(editModalMsg, data.message || 'Document mis à jour !', 'success');
         setTimeout(() => { fermerModal('edit-modal'); chargerDocuments(); }, 1000);
       } else {
-        afficherMsgModal(editModalMsg, text || 'Erreur lors de la modification.');
+        afficherMsgModal(editModalMsg, data.message || 'Erreur lors de la modification.');
       }
     } catch (err) {
-      afficherMsgModal(editModalMsg, 'Erreur réseau.');
+      console.error('Error editing document:', err);
+      afficherMsgModal(editModalMsg, 'Erreur réseau: ' + err.message);
     } finally {
       btnEditSubmit.disabled    = false;
       btnEditSubmit.textContent = 'Mettre à jour';
@@ -368,17 +386,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const id = document.getElementById('delete-id').value;
     btnDeleteConfirm.disabled = true;
     try {
-      const res  = await fetch(`${BASE}delete_document.php?id=${encodeURIComponent(id)}`);
-      const text = await res.text();
+      const res  = await fetch(`${DOCUMENTS_API}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      let data;
+      
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        data = { success: false, message: 'Erreur: réponse invalide du serveur' };
+      }
+      
       fermerModal('delete-modal');
-      if (text.includes('supprimé') || res.ok) {
-        afficherStatut('Document supprimé avec succès.', 'success');
+      if (data.success || (res.ok && res.status === 200)) {
+        afficherStatut(data.message || 'Document supprimé avec succès.', 'success');
         chargerDocuments();
       } else {
-        afficherStatut(text || 'Erreur lors de la suppression.', 'error');
+        afficherStatut(data.message || 'Erreur lors de la suppression.', 'error');
       }
     } catch (err) {
-      afficherStatut('Erreur réseau.', 'error');
+      console.error('Error deleting document:', err);
+      afficherStatut('Erreur réseau: ' + err.message, 'error');
     } finally {
       btnDeleteConfirm.disabled = false;
     }
