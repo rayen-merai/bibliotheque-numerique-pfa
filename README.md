@@ -1,103 +1,159 @@
-<<<<<<< HEAD
-# Bibliothèque Numérique — Backend Unifié
+# 📚 Bibliothèque Numérique (Digital Library)
 
-## Structure du projet après intégration
+A comprehensive digital library management system with document uploads, user authentication, borrowing tracking, and admin dashboard.
+
+## ✨ Features
+
+- **User Authentication** - Secure login and registration with JWT
+- **Document Management** - Upload PDF/EPUB files to the library
+- **Book Catalog** - Browse and search available books
+- **Borrowing System** - Check out books and track loan history
+- **Admin Dashboard** - Manage users, view statistics, and track active loans
+- **File Upload** - Upload documents with automatic file storage and database tracking
+
+## 🏗️ Project Structure
 
 ```
-biblio/
-├── server.js          ← CE FICHIER (backend unifié)
-├── package.json
-├── .env
-├── schema.sql
+bibliotheque-numerique-pfa/
+├── server.js              # Express server (port 3000)
+├── package.json           # Dependencies
+├── schema.sql             # Database schema
+├── index.php              # Entry point
 │
-├── utilisateurs/      ← Frontend inchangé (servi par Node)
-│   ├── html.html      → http://localhost:3000/html.html
-│   ├── register.html  → http://localhost:3000/register.html
-│   ├── admin.html     → http://localhost:3000/admin.html
-│   ├── user.html      → http://localhost:3000/user.html
-│   ├── js.js
+├── utilisateurs/          # User authentication pages
+│   ├── html.html         # Login page
+│   ├── register.html     # Registration page
+│   ├── admin.html        # Admin dashboard
+│   ├── user.html         # User dashboard
+│   └── app.js, style.css
+│
+├── emprunts/             # Loan management
+│   ├── emprunts.html    # Loan history & checkout
+│   └── app.js
+│
+├── recources/            # Document management
+│   ├── index.html       # Document upload/browse
 │   ├── app.js
-│   └── style.css
+│   └── php/biblio/uploads/  # Uploaded files storage
 │
-├── emprunts/          ← Frontend inchangé (servi par Node)
-│   └── emprunts.html  → http://localhost:3000/emprunts.html
-│
-└── recources/         ← Frontend PHP inchangé (servi par Apache/XAMPP)
-    ├── index.html     → http://localhost/recources/index.html
-    └── php/biblio/    ← Scripts PHP (inchangés)
+└── start-server.bat      # Batch script to start server
 ```
 
 ---
 
-## Installation
+## 🚀 Quick Start
 
-### 1. Placer le fichier
+### Prerequisites
+- Node.js (v14 or higher)
+- MySQL/MariaDB running on XAMPP
+- npm installed
 
-Copier `server.js`, `package.json`, `.env` dans le dossier `biblio/` :
+### Installation & Setup
+
+1. **Install Dependencies**
+   ```bash
+   npm install
+   ```
+
+2. **Setup Database**
+   - MySQL should be running via XAMPP
+   - Server will auto-create tables from `schema.sql`
+   - If password protected, update `.env` file:
+     ```
+     DB_HOST=localhost
+     DB_USER=root
+     DB_PASSWORD=your_password
+     DB_NAME=bibliotheque
+     DB_PORT=3306
+     ```
+
+3. **Start the Server**
+   ```bash
+   npm start
+   ```
+   Or use: `start-server.bat`
+
+4. **Access the Application**
+   - Login: http://localhost:3000/html.html
+   - Admin Dashboard: http://localhost:3000/admin.html
+   - User Dashboard: http://localhost:3000/user.html
+   - Loan Management: http://localhost:3000/emprunts.html
+   - Document Upload: http://localhost:3000/recources/index.html
+
+---
+
+## 👥 Test Accounts
+
+| Email | Password | Role |
+|-------|----------|------|
+| admin@biblio.fr | admin123 | Administrator |
+| alice@biblio.fr | alice123 | User |
+| bob@biblio.fr | bob123 | User |
+
+---
+
+## 📡 API Endpoints
+
+### Authentication
+- `POST /api/login` - User login
+- `POST /api/register` - New user registration
+
+### Documents
+- `GET /api/documents` - List all documents
+- `POST /api/documents` - Upload new document (requires file + title/author/category)
+- `GET /api/documents/:id` - Get document details
+- `PUT /api/documents/:id` - Update document
+- `DELETE /api/documents/:id` - Delete document
+
+### Emprunts (Loans)
+- `GET /api/emprunts` - List user loans
+- `POST /api/emprunts` - Create new loan
+- `GET /api/emprunts/stats` - Get loan statistics (admin view shows all, user view shows personal)
+- `PUT /api/emprunts/:id` - Return a book
+
+---
+
+## 🛠️ Tech Stack
+
+- **Backend**: Node.js, Express.js
+- **Database**: MySQL/MariaDB
+- **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
+- **Authentication**: JWT (JSON Web Tokens)
+- **File Upload**: Multer (PDF/EPUB files up to 50MB)
+- **API**: RESTful JSON API
+
+---
+
+## 📝 Key Fixes & Features
+
+✅ **File Upload System** - PDF and EPUB files upload to `recources/php/biblio/uploads/`
+✅ **Database Integration** - Documents stored in MySQL with metadata
+✅ **Admin Statistics** - Fixed to show global loan stats for admins
+✅ **User Authentication** - Secure JWT-based authentication
+✅ **CORS Enabled** - Cross-origin requests supported
+✅ **Error Handling** - Comprehensive error responses
+
+---
+
+## ⚙️ Environment Configuration
+
+Create a `.env` file in root directory:
 
 ```
-biblio/
-├── server.js    ← ici
-├── package.json ← ici
-├── .env         ← ici
-└── ...
-```
-
-### 2. Installer les dépendances
-
-```bash
-cd biblio
-npm install
-```
-
-### 3. Base de données
-
-Ouvrir phpMyAdmin (XAMPP) et importer `schema.sql`, OU laisser le serveur la créer automatiquement au démarrage.
-
-Si votre MySQL a un mot de passe, modifier `.env` :
-```
-DB_PASSWORD=votre_mot_de_passe
-```
-
-### 4. Démarrer
-
-```bash
-# Terminal 1 — démarrer XAMPP (pour le module recources PHP)
-# (ouvrir XAMPP Control Panel → Start Apache + MySQL)
-
-# Terminal 2 — démarrer le serveur Node unifié
-cd biblio
-node server.js
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=bibliotheque
+DB_PORT=3306
+JWT_SECRET=your_secret_key
+PORT=3000
 ```
 
 ---
 
-## URLs d'accès
+## 📖 Documentation
 
-| Page | URL |
-|------|-----|
-| Connexion | http://localhost:3000/html.html |
-| Inscription | http://localhost:3000/register.html |
-| Dashboard admin | http://localhost:3000/admin.html |
-| Espace utilisateur | http://localhost:3000/user.html |
-| Gestion des emprunts | http://localhost:3000/emprunts.html |
-| Gestion des ressources (PHP) | http://localhost/recources/index.html |
-
----
-
-## Comptes de démonstration
-
-| Email | Mot de passe | Rôle |
-|-------|-------------|------|
-| admin@biblio.fr | admin123 | Administrateur |
-| alice@biblio.fr | alice123 | Utilisateur |
-| bob@biblio.fr   | bob123   | Utilisateur |
-
----
-
-## API Reference
-
-### Authentification
+See `SETUP_GUIDE.md` for detailed setup instructions.
 | Méthode | Route | Description |
 |---------|-------|-------------|
 | POST | /api/login | Connexion → retourne JWT |
